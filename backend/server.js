@@ -7,7 +7,14 @@ const Grid = require("gridfs-stream");
 const { GridFsStorage } = require("multer-gridfs-storage");
 
 const app = express();
-app.use(cors());
+
+// ✅ CORS configuration (Allow only your frontend)
+app.use(cors({
+    origin: "https://video-streaming-pumw-e9h90fjs5-rohangaikws-projects.vercel.app",
+    methods: "GET, POST, PUT, DELETE",
+    allowedHeaders: "Content-Type"
+}));
+
 app.use(express.json());
 
 const MONGO_URI = process.env.MONGO_URI;
@@ -25,11 +32,7 @@ conn.once("open", () => {
     gfs.collection("uploads");
 });
 
-const upload = multer({ 
-    storage, 
-    limits: { fileSize: 100 * 1024 * 1024 } // 100MB limit
-});
-// GridFS Storage
+// ✅ GridFS Storage (Fixing misplaced storage definition)
 const storage = new GridFsStorage({
     url: MONGO_URI,
     file: (req, file) => {
@@ -39,19 +42,20 @@ const storage = new GridFsStorage({
         };
     }
 });
-const upload = multer({ storage });
 
-// Upload Video API (GridFS)
-app.post("/upload", upload.single("video"), async (req, res) => {
+const upload = multer({ storage, limits: { fileSize: 100 * 1024 * 1024 } }); // 100MB limit
+
+// ✅ Upload Video API (GridFS)
+app.post("/api/upload", upload.single("video"), async (req, res) => {
     try {
         res.json({ message: "Video uploaded successfully", file: req.file });
     } catch (err) {
-        res.status(500).json({ message: "Error uploading video" });
+        res.status(500).json({ message: "Error uploading video", error: err.message });
     }
 });
 
-// Fetch All Videos
-app.get("/videos", async (req, res) => {
+// ✅ Fetch All Videos
+app.get("/api/videos", async (req, res) => {
     try {
         gfs.files.find().toArray((err, files) => {
             if (!files || files.length === 0) {
@@ -60,12 +64,12 @@ app.get("/videos", async (req, res) => {
             res.json(files);
         });
     } catch (err) {
-        res.status(500).json({ message: "Error fetching videos" });
+        res.status(500).json({ message: "Error fetching videos", error: err.message });
     }
 });
 
-// Stream Video API (GridFS)
-app.get("/stream/:filename", async (req, res) => {
+// ✅ Stream Video API (GridFS)
+app.get("/api/stream/:filename", async (req, res) => {
     try {
         gfs.files.findOne({ filename: req.params.filename }, (err, file) => {
             if (!file) {
@@ -95,22 +99,22 @@ app.get("/stream/:filename", async (req, res) => {
             readStream.pipe(res);
         });
     } catch (err) {
-        res.status(500).json({ message: "Error streaming video" });
+        res.status(500).json({ message: "Error streaming video", error: err.message });
     }
 });
 
-
-// Delete Video API
-app.delete("/delete/:filename", async (req, res) => {
+// ✅ Delete Video API
+app.delete("/api/delete/:filename", async (req, res) => {
     try {
         gfs.remove({ filename: req.params.filename, root: "uploads" }, (err) => {
-            if (err) return res.status(500).json({ message: "Error deleting video" });
+            if (err) return res.status(500).json({ message: "Error deleting video", error: err.message });
             res.json({ message: "Video deleted successfully" });
         });
     } catch (err) {
-        res.status(500).json({ message: "Error deleting video" });
+        res.status(500).json({ message: "Error deleting video", error: err.message });
     }
 });
 
+// ✅ Server Start
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
