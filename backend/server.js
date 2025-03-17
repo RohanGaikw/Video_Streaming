@@ -1,128 +1,88 @@
-require("dotenv").config(); // Load environment variables
+require("dotenv").config();
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const multer = require("multer");
-const fs = require("fs");
-const path = require("path");
+const Grid = require("gridfs-stream");
+const { GridFsStorage } = require("multer-gridfs-storage");
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 const MONGO_URI = process.env.MONGO_URI;
-
-// Ensure MongoDB URI is loaded
 if (!MONGO_URI) {
     console.error("❌ MONGO_URI is not defined. Check your .env file.");
-    process.exit(1); // Stop server if MongoDB URI is missing
+    process.exit(1);
 }
 
 // MongoDB Connection
-mongoose.connect(MONGO_URI).then(() => console.log("✅ MongoDB Connected"))
-  .catch(err => console.log("❌ MongoDB Connection Error:", err));
+const conn = mongoose.createConnection(MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true });
 
-// Video Schema
-const videoSchema = new mongoose.Schema({
-    title: String,
-    videoPath: String
+let gfs;
+conn.once("open", () => {
+    gfs = Grid(conn.db, mongoose.mongo);
+    gfs.collection("uploads");
 });
-const Video = mongoose.model("Video", videoSchema);
 
-// Ensure `uploads` folder exists
-if (!fs.existsSync("./uploads")) {
-    fs.mkdirSync("./uploads");
-}
-
-// Multer Storage & Validation
-const storage = multer.diskStorage({
-    destination: "./uploads",
-    filename: (req, file, cb) => {
-        cb(null, Date.now() + path.extname(file.originalname));
+// GridFS Storage
+const storage = new GridFsStorage({
+    url: MONGO_URI,
+    file: (req, file) => {
+        return {
+            filename: Date.now() + "-" + file.originalname,
+            bucketName: "uploads"
+        };
     }
 });
+const upload = multer({ storage });
 
-const fileFilter = (req, file, cb) => {
-    if (file.mimetype !== "video/mp4") {
-        return cb(new Error("Only MP4 videos are allowed"), false);
-    }
-    cb(null, true);
-};
-
-const upload = multer({ 
-    storage,
-    fileFilter,
-    limits: { fileSize: 50 * 1024 * 1024 } // 50MB limit
-});
-
-// Upload Video API
+// Upload Video API (GridFS)
 app.post("/upload", upload.single("video"), async (req, res) => {
     try {
-        if (!req.file) {
-            return res.status(400).json({ message: "Invalid file format or file too large" });
-        }
-
-        const video = new Video({ title: req.body.title, videoPath: req.file.filename });
-        await video.save();
-        res.json({ message: "Video uploaded successfully" });
+        res.json({ message: "Video uploaded successfully", file: req.file });
     } catch (err) {
         res.status(500).json({ message: "Error uploading video" });
     }
 });
 
-// Get All Videos API
+// Fetch All Videos
 app.get("/videos", async (req, res) => {
     try {
-        const videos = await Video.find();
-        res.json(videos);
+        gfs.files.find().toArray((err, files) => {
+            if (!files || files.length === 0) {
+                return res.status(404).json({ message: "No videos found" });
+            }
+            res.json(files);
+        });
     } catch (err) {
         res.status(500).json({ message: "Error fetching videos" });
     }
 });
 
-// Stream Video API
-app.get("/stream/:filename", (req, res) => {
-    const filePath = path.join(__dirname, "uploads", req.params.filename);
-    if (!fs.existsSync(filePath)) {
-        return res.status(404).json({ message: "Video not found" });
-    }
-
-    const stat = fs.statSync(filePath);
-    res.writeHead(200, {
-        "Content-Type": "video/mp4",
-        "Content-Length": stat.size
-    });
-    fs.createReadStream(filePath).pipe(res);
-});
-
-// Update Video Title API
-app.put("/update/:id", async (req, res) => {
+// Stream Video API (GridFS)
+app.get("/stream/:filename", async (req, res) => {
     try {
-        const { title } = req.body;
-        await Video.findByIdAndUpdate(req.params.id, { title });
-        res.json({ message: "Video updated successfully" });
+        gfs.files.findOne({ filename: req.params.filename }, (err, file) => {
+            if (!file) {
+                return res.status(404).json({ message: "Video not found" });
+            }
+            const readStream = gfs.createReadStream(file.filename);
+            res.set("Content-Type", "video/mp4");
+            readStream.pipe(res);
+        });
     } catch (err) {
-        res.status(500).json({ message: "Error updating video" });
+        res.status(500).json({ message: "Error streaming video" });
     }
 });
-
-
-app.get("/", (req, res) => {
-    res.send("🎥 Video Streaming Backend is Running!");
-});
-
 
 // Delete Video API
-app.delete("/delete/:id", async (req, res) => {
+app.delete("/delete/:filename", async (req, res) => {
     try {
-        const video = await Video.findById(req.params.id);
-        if (!video) return res.status(404).json({ message: "Video not found" });
-
-        const filePath = path.join(__dirname, "uploads", video.videoPath);
-        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-
-        await Video.findByIdAndDelete(req.params.id);
-        res.json({ message: "Video deleted successfully" });
+        gfs.remove({ filename: req.params.filename, root: "uploads" }, (err) => {
+            if (err) return res.status(500).json({ message: "Error deleting video" });
+            res.json({ message: "Video deleted successfully" });
+        });
     } catch (err) {
         res.status(500).json({ message: "Error deleting video" });
     }
