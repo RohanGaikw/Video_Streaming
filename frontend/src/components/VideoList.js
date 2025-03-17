@@ -5,10 +5,14 @@ function VideoList() {
   const [videos, setVideos] = useState([]);
 
   useEffect(() => {
-    // Fetch videos from localStorage and log to check
-    const storedVideos = JSON.parse(localStorage.getItem('videos')) || [];
-    console.log("Stored videos:", storedVideos);
-    setVideos(storedVideos);
+    // Fetch videos from backend API
+    fetch('https://video-streaming-git-main-rohangaikws-projects.vercel.app/api/videos')
+      .then(response => response.json())
+      .then(data => {
+        console.log("Fetched videos:", data);
+        setVideos(data);
+      })
+      .catch(error => console.error("Error fetching videos:", error));
   }, []);
 
   return (
