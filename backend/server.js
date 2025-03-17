@@ -25,6 +25,10 @@ conn.once("open", () => {
     gfs.collection("uploads");
 });
 
+const upload = multer({ 
+    storage, 
+    limits: { fileSize: 100 * 1024 * 1024 } // 100MB limit
+});
 // GridFS Storage
 const storage = new GridFsStorage({
     url: MONGO_URI,
@@ -67,14 +71,34 @@ app.get("/stream/:filename", async (req, res) => {
             if (!file) {
                 return res.status(404).json({ message: "Video not found" });
             }
-            const readStream = gfs.createReadStream(file.filename);
-            res.set("Content-Type", "video/mp4");
+
+            const range = req.headers.range;
+            if (!range) {
+                return res.status(400).send("Requires Range header");
+            }
+
+            const videoSize = file.length;
+            const CHUNK_SIZE = 10 ** 6; // 1MB chunk size
+            const start = Number(range.replace(/\D/g, ""));
+            const end = Math.min(start + CHUNK_SIZE, videoSize - 1);
+
+            const contentLength = end - start + 1;
+            const headers = {
+                "Content-Range": `bytes ${start}-${end}/${videoSize}`,
+                "Accept-Ranges": "bytes",
+                "Content-Length": contentLength,
+                "Content-Type": "video/mp4",
+            };
+
+            res.writeHead(206, headers);
+            const readStream = gfs.createReadStream({ filename: file.filename, start, end });
             readStream.pipe(res);
         });
     } catch (err) {
         res.status(500).json({ message: "Error streaming video" });
     }
 });
+
 
 // Delete Video API
 app.delete("/delete/:filename", async (req, res) => {
