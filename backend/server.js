@@ -106,6 +106,12 @@ app.put("/update/:id", async (req, res) => {
     }
 });
 
+
+app.get("/", (req, res) => {
+    res.send("🎥 Video Streaming Backend is Running!");
+});
+
+
 // Delete Video API
 app.delete("/delete/:id", async (req, res) => {
     try {
