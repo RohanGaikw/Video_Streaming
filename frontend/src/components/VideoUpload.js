@@ -8,8 +8,10 @@ function VideoUpload() {
   const [videos, setVideos] = useState([]);
   const [editingId, setEditingId] = useState(null);
 
+  const API_BASE_URL = 'https://video-streaming-liard.vercel.app/api';
+
   useEffect(() => {
-    fetch('https://video-streaming-git-main-rohangaikws-projects.vercel.app/api/videos')
+    fetch(`${API_BASE_URL}/videos`)
       .then((res) => res.json())
       .then((data) => setVideos(data))
       .catch((err) => console.error('Error fetching videos:', err));
@@ -27,7 +29,7 @@ function VideoUpload() {
     formData.append('name', videoName);
     formData.append('description', videoDescription);
 
-    const response = await fetch('https://video-streaming-git-main-rohangaikws-projects.vercel.app/api/upload', {
+    const response = await fetch(`${API_BASE_URL}/upload`, {
       method: 'POST',
       body: formData,
     });
@@ -44,7 +46,7 @@ function VideoUpload() {
   };
 
   const handleDelete = async (id) => {
-    const response = await fetch(`https://video-streaming-git-main-rohangaikws-projects.vercel.app/api/videos/${id}`, {
+    const response = await fetch(`${API_BASE_URL}/videos/${id}`, {
       method: 'DELETE',
     });
 
