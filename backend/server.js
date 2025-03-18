@@ -10,9 +10,9 @@ const app = express();
 
 // ✅ CORS configuration (Allow only your frontend)
 app.use(cors({
-    origin: "https://video-streaming-pumw.vercel.app",
-    methods: "GET, POST, PUT, DELETE",
-    allowedHeaders: "Content-Type"
+    origin: "*", // किंवा specific frontend URL ठेव
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    allowedHeaders: ["Content-Type", "Authorization"]
 }));
 
 
